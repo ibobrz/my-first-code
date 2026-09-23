@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Surgical Emergency Decision Support</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🩺</text></svg>">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f1f5f9;--surface:#fff;--ink:#0f172a;--muted:#475569;--line:#cbd5e1;--blue:#1d4ed8;--tint:#eff6ff;--hl:#fef9c3;
+    --c-resus:#dc2626;--c-diag:#2563eb;--c-img:#0f766e;--c-trig:#b45309;
+    box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1220;--surface:#111b2e;--ink:#e6edf7;--muted:#a3b3ca;--line:#2a3a55;--blue:#8ab8ff;--tint:#14243f;--hl:#3a3410}}
+  :root[data-theme="dark"]{--bg:#0b1220;--surface:#111b2e;--ink:#e6edf7;--muted:#a3b3ca;--line:#2a3a55;--blue:#8ab8ff;--tint:#14243f;--hl:#3a3410}
+  html{scroll-padding-top:9rem}
+  body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.5}
+  .bar{background:var(--surface);border-bottom:1px solid var(--line)}
+  .input{background:var(--bg);border:1.5px solid var(--line);color:var(--ink)}
+  .input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 25%,transparent)}
+  .chip{border:1.5px solid var(--line);background:var(--surface);color:var(--muted);white-space:nowrap;font-weight:500}
+  .chip[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:#fff}
+  :root[data-theme="dark"] .chip[aria-pressed="true"]{color:#0b1220}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip[aria-pressed="true"]{color:#0b1220}}
+  .chip:focus-visible,summary:focus-visible,.btn:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+  .muted{color:var(--muted)}
+  .pill{background:var(--tint);color:var(--blue);font-weight:600;border-radius:999px;padding:.1rem .65rem;font-size:.75rem}
+  .hl{background:var(--hl);border:1px solid var(--line);border-radius:10px}
+  .sec{border:1px solid var(--line);border-left:5px solid var(--c);border-radius:10px;background:var(--bg)}
+  .sec summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;font-weight:600}
+  .sec summary::-webkit-details-marker{display:none}
+  .sec .badge{background:var(--c);color:#fff;border-radius:6px;min-width:1.6rem;height:1.6rem;display:grid;place-items:center;font-size:.8rem}
+  .sec .chev{margin-left:auto;transition:transform .15s}
+  .sec[open] .chev{transform:rotate(90deg)}
+  .sec ul{padding:.1rem .9rem .9rem 2.4rem;list-style:disc}
+  .sec li{margin-top:.35rem}
+  .sec li::marker{color:var(--c)}
+  .btn{border:1.5px solid var(--line);border-radius:8px;padding:.25rem .7rem;font-size:.8rem;font-weight:500;color:var(--muted);background:var(--surface)}
+  .sec .body{padding:0 .9rem .9rem}
+  .lab{display:grid;gap:.1rem;padding:.55rem .9rem;border-top:1px solid var(--line);font-size:.9rem}
+  .lab .n{font-weight:600}.lab .r{color:var(--muted)}.lab .f{color:var(--ink)}
+  .lab .r::before{content:'Normal: ';font-weight:600}.lab .f::before{content:'In disease: ';font-weight:600;color:var(--c)}
+  .lab.head{display:none}
+  @media(min-width:720px){.lab{grid-template-columns:10rem 13rem 1fr;gap:1rem}.lab .r::before,.lab .f::before{content:none}
+    .lab.head{display:grid;font-weight:600;font-size:.8rem;color:var(--muted);border-top:0}}
+  .flow{display:flex;flex-direction:column;align-items:center;gap:.4rem}
+  .fbox{border:1.5px solid var(--c,var(--line));background:var(--surface);border-radius:10px;padding:.6rem .8rem;width:100%;font-size:.9rem}
+  .fbox b{display:block;color:var(--c,var(--ink));margin-bottom:.15rem}
+  .farrow{color:var(--muted);line-height:1;font-size:1.1rem}
+  .fbranches{display:grid;gap:1rem;width:100%}
+  @media(min-width:720px){.fbranches{grid-template-columns:1fr 1fr}}
+  .br{display:flex;flex-direction:column;align-items:center;gap:.4rem;border-top:4px solid var(--c);padding-top:.5rem}
+  .brh{font-weight:700;color:var(--c)}
+  @media (prefers-reduced-motion:reduce){.sec .chev{transition:none}}
+</style>
+</head>
+<body>
+
+<header class="bar sticky top-0 z-20" style="top:env(safe-area-inset-top,0px)">
+  <div class="max-w-5xl mx-auto px-4 pt-3 pb-3">
+    <div class="flex items-baseline justify-between gap-3">
+      <h1 class="text-lg sm:text-xl font-bold">Surgical Emergency Decision Support</h1>
+      <span class="text-xs muted hidden sm:inline">For students and surgical residents</span>
+    </div>
+    <label class="sr-only" for="q">Search conditions</label>
+    <input id="q" type="search" autocomplete="off" placeholder="Search by condition, symptom or keyword (e.g. RIF pain, Murphy, free air)"
+      class="input w-full mt-2 rounded-lg px-3 py-2.5 text-base">
+    <div id="chips" class="flex gap-2 mt-2 overflow-x-auto pb-1" role="group" aria-label="Category filter"></div>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-4">
+  <p id="count" class="text-sm muted mb-3" aria-live="polite"></p>
+  <div id="list" class="grid gap-4"></div>
+  <p id="empty" class="hidden card p-6 text-center muted">No matching conditions. Clear the search or choose another category.</p>
+  <p class="text-xs muted mt-8 mb-6">Educational reference only. It does not replace local protocols, senior review or clinical judgement. Doses and thresholds vary by institution.</p>
+</main>
+
+<script>
+/* =====================================================================
+   DATA SCHEMA: append new conditions to the DATA array below.
+   {
+     id:        'unique-slug',
+     name:      'Condition name',
+     category:  one of CATEGORIES (add a new string there to create a new chip),
+     presentation: 'Typical presenting complaint (one line)',
+     keywords:  ['extra', 'search', 'terms'],
+     highlight: { title: 'Score or criteria box', rows: [['label','value'], ...], note: 'optional footer' },
+     labs:        [['Test','Normal range','Expected finding in this disease'], ...],
+     algo:        { triage:'Step 1 question', unstable:['Step 2','Step 3'], stable:['Step 2','Step 3'] },
+     resus:       ['bullet', ...],   // a. Immediate Bedside Resuscitation
+     diagnostics: ['bullet', ...],   // b. Essential Diagnostics & Labs
+     imaging:     ['bullet', ...],   // c. First-line Imaging & Bedside Ultrasound
+     triggers:    ['bullet', ...]    // d. Surgical Triggers & Red Flags
+   }
+   ===================================================================== */
+const CATEGORIES = ['Hepatobiliary', 'Lower GIT / Appendix', 'Pancreas & Upper GIT', 'Urological & Trauma'];
+
+const DATA = [
+  {
+    id: 'appendicitis', name: 'Acute Appendicitis', category: 'Lower GIT / Appendix',
+    presentation: 'Periumbilical pain migrating to the right iliac fossa, anorexia, nausea, low-grade fever',
+    keywords: ['RIF pain', 'appendix', 'McBurney', 'Rovsing', 'psoas', 'Alvarado', 'appendicectomy', 'appendectomy'],
+    highlight: {
+      title: 'Alvarado score (MANTRELS), max 10',
+      rows: [['Migration of pain to RIF', '1'], ['Anorexia', '1'], ['Nausea / vomiting', '1'], ['Tenderness in RIF', '2'],
+             ['Rebound tenderness', '1'], ['Elevated temperature (37.3 °C or above)', '1'], ['Leukocytosis (WBC above 10 x10⁹/L)', '2'], ['Shift to left (neutrophils above 75%)', '1']],
+      note: '1–4 unlikely (discharge with safety net) · 5–6 possible (observe, image) · 7–8 probable · 9–10 very probable (surgical review)'
+    },
+    labs: [['WBC','4,000–11,000 /µL','Leukocytosis (above 10,000) with left shift (neutrophils above 75%)'],
+      ['CRP','Below 5 mg/L','Raised; very high values suggest perforation or abscess'],
+      ['Serum creatinine','0.6–1.2 mg/dL','Normal, or raised if dehydrated or septic'],
+      ['Lactate','0.5–2.0 mmol/L','Above 2 suggests sepsis, perforation or ischaemia'],
+      ['Urinalysis','No blood or leukocytes','Mild pyuria or haematuria possible; nitrite-positive suggests UTI'],
+      ['β-hCG','Negative','Must exclude ectopic pregnancy in women of childbearing age']],
+    algo: {triage:'Peritonitis, sepsis or shock (hypotension, HR above 120)?',
+      unstable:['2 large-bore IVs, crystalloid bolus, IV antibiotics, lactate, crossmatch; bedside US for free fluid.','Emergent appendicectomy or laparotomy after brief optimisation. Do not delay for CT.'],
+      stable:['Alvarado or AIR score; US (children, young women, pregnancy) or IV-contrast CT (adults) if intermediate.','Alvarado 7 or more, or confirmed on imaging: laparoscopic appendicectomy within 24 h. Abscess: antibiotics and drainage. Low score: observe and re-examine.']},
+    resus: ['NPO from the time of suspicion; maintenance IV crystalloid, bolus if dehydrated or septic.',
+            'IV analgesia (paracetamol, opioid titrated). Analgesia does not mask the diagnosis.',
+            'IV antibiotics at diagnosis (e.g. cephalosporin plus metronidazole); continue post-op only if complicated.',
+            'Antiemetic; urinary catheter only if septic or needing strict output.',
+            'Group and screen, consent and theatre booking once decision is made.'],
+    diagnostics: ['CBC: leukocytosis with neutrophilia; CRP rising supports the diagnosis.',
+                  'U&E and creatinine, glucose; lactate if septic or peritonitic.',
+                  'Urinalysis (exclude UTI or stone; sterile pyuria can occur with appendicitis).',
+                  'Pregnancy test in all women of childbearing age.',
+                  'Calculate Alvarado (or AIR) score and document it.'],
+    imaging: ['Bedside/graded-compression US (first line in children, young women, pregnancy): non-compressible blind-ended tubular structure over 6 mm, target sign, appendicolith, hyperechoic peri-appendiceal fat, free fluid.',
+              'Normal US does not exclude appendicitis if the appendix is not visualised.',
+              'CT abdomen/pelvis with IV contrast in adults with equivocal findings: dilated appendix, wall enhancement, fat stranding.',
+              'MRI for pregnancy if US inconclusive.'],
+    triggers: ['Generalised peritonitis, perforation, or septic shock: urgent theatre after brief resuscitation.',
+               'Confirmed appendicitis: appendicectomy (laparoscopic preferred), ideally within 24 hours.',
+               'Appendiceal abscess or phlegmon: antibiotics and percutaneous drainage; interval surgery is selective.',
+               'Rising pain, fever or WBC on observation, or Alvarado of 7 or more.',
+               'Red flags: age extremes, immunosuppression, pregnancy, or symptoms over 48 hours (higher perforation risk).']
+  },
+  {
+    id: 'cholecystitis', name: 'Acute Cholecystitis', category: 'Hepatobiliary',
+    presentation: 'Constant RUQ/epigastric pain over 6 hours, fever, nausea, positive Murphy sign, often after a fatty meal',
+    keywords: ['RUQ pain', 'gallstones', 'Murphy sign', 'cholelithiasis', 'gallbladder', 'Tokyo', 'cholecystectomy', 'cholangitis'],
+    highlight: {
+      title: 'Tokyo Guidelines 2018: diagnosis',
+      rows: [['A. Local signs', 'Murphy sign; RUQ mass, pain or tenderness'], ['B. Systemic signs', 'Fever; raised CRP; raised WBC'],
+             ['C. Imaging', 'Findings characteristic of acute cholecystitis'], ['Suspected', 'One item in A plus one item in B'], ['Definite', 'One in A, one in B and C']],
+      note: 'Grade III (severe): any organ dysfunction (hypotension on pressors, reduced consciousness, PaO₂/FiO₂ under 300, oliguria or creatinine above 2, INR above 1.5, platelets under 100). Grade II: WBC above 18, palpable mass, over 72 hours, marked local inflammation.'
+    },
+    labs: [['WBC','4,000–11,000 /µL','Leukocytosis above 10,000; above 18,000 makes Grade II'],
+      ['CRP','Below 5 mg/L','Raised (Tokyo criterion: 3 mg/dL or more)'],
+      ['Total bilirubin','Below 1.2 mg/dL','Mild rise; higher with dilated CBD suggests stone or Mirizzi'],
+      ['ALP / GGT','ALP 44–147 U/L','Raised cholestatic pattern suggests CBD stone or cholangitis'],
+      ['ALT / AST','7–56 / 10–40 U/L','Mild rise; above 3x ULN suggests choledocholithiasis'],
+      ['Serum lipase','10–140 U/L','Above 3x ULN suggests coexisting gallstone pancreatitis'],
+      ['INR / platelets','INR 0.8–1.2; 150–400 x10⁹/L','INR above 1.5 or platelets under 100 = Grade III organ dysfunction']],
+    algo: {triage:'Septic shock or organ dysfunction (Tokyo Grade III)?',
+      unstable:['Sepsis bundle: 2 large-bore IVs, cultures, broad-spectrum antibiotics, fluids, lactate, HDU/ICU.','Percutaneous cholecystostomy (or emergent cholecystectomy if perforated or gangrenous and fit). ERCP if cholangitis.'],
+      stable:['US against Tokyo criteria, LFTs, lipase, CRP; MRCP if CBD stones suspected.','Grade I/II: early laparoscopic cholecystectomy within 72 h (up to 7 days). CBD stones: ERCP. Unfit: drainage or conservative care.']},
+    resus: ['NPO, IV crystalloid; correct electrolytes.',
+            'IV analgesia (opioid or NSAID if renal function allows); antiemetic.',
+            'Start IV broad-spectrum antibiotics (e.g. piperacillin-tazobactam or ceftriaxone plus metronidazole).',
+            'Blood cultures if febrile or septic; urinary catheter for strict output if unwell.',
+            'Grade III: ICU/HDU review, organ support and early drainage plan.'],
+    diagnostics: ['CBC (WBC, platelets), CRP.',
+                  'LFTs: bilirubin, ALP, GGT, AST/ALT. A marked rise suggests CBD stones or cholangitis.',
+                  'Amylase or lipase to exclude gallstone pancreatitis.',
+                  'U&E, creatinine, glucose; lactate if septic; INR and group and screen pre-op.',
+                  'ECG in older patients (inferior MI mimics RUQ pain).'],
+    imaging: ['Bedside/formal US is first line: gallstones or impacted stone, wall thickening over 4 mm, gallbladder distension, pericholecystic fluid, striated wall.',
+              'Sonographic Murphy sign: maximal tenderness under the probe over the gallbladder.',
+              'Measure CBD (over 6 mm suggests obstruction). Look for gas in the wall or lumen (emphysematous) and wall defects (perforation).',
+              'HIDA scan, MRCP or CT if US is equivocal or CBD stones are suspected.'],
+    triggers: ['Grade I/II: early laparoscopic cholecystectomy, ideally within 72 hours (up to 7 days) in experienced centres.',
+               'Grade III or unfit for surgery: percutaneous cholecystostomy after stabilisation, delayed cholecystectomy.',
+               'Red flags: gangrenous or emphysematous cholecystitis, perforation with bile peritonitis, gallbladder abscess: urgent surgery.',
+               'Charcot triad (fever, jaundice, RUQ pain) or Reynolds pentad (plus shock, confusion): urgent biliary decompression by ERCP.',
+               'Failure to improve within 24–48 hours of antibiotics.']
+  },
+  {
+    id: 'pancreatitis', name: 'Acute Pancreatitis', category: 'Pancreas & Upper GIT',
+    presentation: 'Severe epigastric pain radiating to the back, vomiting, relieved by leaning forward; gallstones or alcohol history',
+    keywords: ['epigastric pain', 'lipase', 'amylase', 'Atlanta', 'necrosis', 'gallstone pancreatitis', 'Ranson', 'BISAP', 'fluids'],
+    highlight: {
+      title: 'Revised Atlanta criteria: diagnosis needs 2 of 3',
+      rows: [['1. Pain', 'Acute epigastric pain, often radiating to the back'], ['2. Enzymes', 'Lipase or amylase above 3 x upper limit of normal'],
+             ['3. Imaging', 'Characteristic findings on US, CT or MRI'], ['Mild', 'No organ failure, no local or systemic complications'],
+             ['Moderately severe', 'Transient organ failure (under 48 h) or local complications'], ['Severe', 'Persistent organ failure over 48 h (modified Marshall score 2 or more)']],
+      note: 'Early fluids: goal-directed moderate resuscitation. 10 mL/kg bolus only if hypovolaemic, then Lactated Ringer\'s at about 1.5 mL/kg/h. Reassess every 4–6 h (heart rate, MAP, urine output above 0.5 mL/kg/h, BUN/haematocrit). Avoid aggressive over-hydration, which raises fluid overload and respiratory complications.'
+    },
+    labs: [['Serum lipase','10–140 U/L','Above 3x ULN (above 420 U/L)'],
+      ['Serum amylase','30–110 U/L','Above 3x ULN; less specific and normalises in 3–5 days'],
+      ['ALT','7–56 U/L','Above 150 U/L suggests gallstone cause'],
+      ['Triglycerides','Below 150 mg/dL','Above 1000 mg/dL (11.3 mmol/L) suggests hypertriglyceridaemic cause'],
+      ['Calcium','8.5–10.5 mg/dL','Hypocalcaemia signals severe disease'],
+      ['Haematocrit','M 41–50%, F 36–46%','Above 44% (haemoconcentration) predicts necrosis'],
+      ['BUN','7–20 mg/dL','Above 20 or rising at 24 h predicts poor outcome (BISAP)'],
+      ['CRP','Below 5 mg/L','Above 150 mg/L at 48 h predicts severe disease'],
+      ['Serum creatinine','0.6–1.2 mg/dL','Above 1.9 mg/dL = renal organ failure (Marshall)']],
+    algo: {triage:'Persistent organ failure, shock or hypoxia?',
+      unstable:['HDU/ICU, 2 large-bore IVs, goal-directed Lactated Ringer, oxygen, analgesia, lactate, ABG; watch for ACS.','Contrast CT after resuscitation for necrosis, bleeding or perforation. ERCP within 24 h if cholangitis. Laparotomy for refractory ACS or ischaemic bowel.'],
+      stable:['Lipase plus US; moderate fluids, analgesia, early oral feeding; find cause (gallstones, triglycerides, calcium).','Mild biliary: cholecystectomy same admission. No prophylactic antibiotics. CT at 72 h or later if deteriorating; infected necrosis: step-up drainage.']},
+    resus: ['Early fluids as above (Lactated Ringer\'s preferred over saline); titrate to clinical targets, not fixed volumes.',
+            'Adequate analgesia including opioids (fentanyl or hydromorphone; epidural if needed).',
+            'Oxygen to SpO₂ 94% or above; monitor for ARDS. Urinary catheter and strict fluid balance.',
+            'Early oral feeding as tolerated within 24–48 h; NG or enteral feeding if not tolerated. Avoid routine NPO.',
+            'No prophylactic antibiotics. Give them only for proven infection (cholangitis, infected necrosis).',
+            'ICU/HDU for persistent organ failure, hypoxia or refractory hypotension.'],
+    diagnostics: ['Serum lipase (preferred) or amylase.',
+                  'CBC, U&E, creatinine, BUN, haematocrit (haemoconcentration), glucose, CRP.',
+                  'LFTs: ALT above 150 U/L suggests a biliary cause.',
+                  'Calcium, triglycerides (over 11.3 mmol/L or 1000 mg/dL suggests hypertriglyceridaemic cause).',
+                  'ABG and lactate if unwell; LDH. Severity scores: BISAP, Ranson, APACHE II.'],
+    imaging: ['Right upper quadrant US in every patient: gallstones, biliary sludge, CBD dilatation. The pancreas is often obscured by bowel gas.',
+              'Contrast CT is not needed at admission if the diagnosis is clear. Use it at 72 hours or later for suspected necrosis, or earlier if the diagnosis is uncertain.',
+              'CT findings: pancreatic oedema, peripancreatic collections, non-enhancing necrosis, gas in a collection (infected necrosis).',
+              'MRCP or EUS for suspected CBD stones or idiopathic cases.'],
+    triggers: ['Gallstone pancreatitis with cholangitis or persistent biliary obstruction: ERCP within 24 hours.',
+               'Infected necrosis: antibiotics and step-up approach (percutaneous or endoscopic drainage, then minimally invasive necrosectomy). Open surgery is a last resort.',
+               'Abdominal compartment syndrome (bladder pressure above 20 mmHg with new organ failure) refractory to medical care: decompressive laparotomy.',
+               'Haemorrhage or pseudoaneurysm: CT angiography and IR embolisation. Bowel ischaemia or perforation: laparotomy.',
+               'Mild biliary pancreatitis: cholecystectomy in the same admission. Red flag: shock, persistent organ failure, rising creatinine.']
+  },
+  {
+    id: 'ppu', name: 'Perforated Peptic Ulcer', category: 'Pancreas & Upper GIT',
+    presentation: 'Sudden severe epigastric pain spreading across the abdomen, board-like rigidity, shoulder-tip pain, history of NSAIDs or ulcer',
+    keywords: ['perforation', 'pneumoperitoneum', 'free air', 'Rigler', 'Graham patch', 'omental patch', 'Boey', 'peritonitis', 'duodenal ulcer', 'NSAID'],
+    highlight: {
+      title: 'Rigler sign and risk stratification',
+      rows: [['Rigler sign', 'Air on both sides of the bowel wall on erect CXR/AXR (pneumoperitoneum)'],
+             ['Other signs', 'Free air under the diaphragm; football sign; falciform ligament sign'],
+             ['Boey score (1 point each)', 'Preoperative shock; serious co-morbidity; perforation over 24 hours'],
+             ['Interpretation', 'Higher score means higher mortality (0 points about 10% or less; 3 points over 50%)']],
+      note: 'A normal erect CXR does not exclude perforation (about 20–25% have no visible free air). Proceed to CT if suspicion is high.'
+    },
+    labs: [['WBC','4,000–11,000 /µL','Leukocytosis (or leukopenia in overwhelming sepsis)'],
+      ['Lactate','0.5–2.0 mmol/L','Above 2 signals sepsis and poor prognosis'],
+      ['Amylase / lipase','30–110 / 10–140 U/L','Mildly raised (below 3x ULN); do not mistake for pancreatitis'],
+      ['Serum creatinine','0.6–1.2 mg/dL','Raised with dehydration or AKI (Boey risk factor)'],
+      ['Haemoglobin','M 13.5–17.5, F 12–15.5 g/dL','Low suggests coexisting ulcer bleeding'],
+      ['ABG pH','7.35–7.45','Metabolic acidosis (pH below 7.35) in sepsis'],
+      ['Troponin','Below 0.04 ng/mL','Normal; exclude MI as a differential']],
+    algo: {triage:'Shock, generalised peritonitis or sepsis?',
+      unstable:['2 large-bore IVs, aggressive crystalloid or blood, NG tube, IV PPI, IV antibiotics, arterial line, ICU bed.','Emergent laparotomy or laparoscopy: Graham omental patch and lavage; resection if large or suspected malignant ulcer.'],
+      stable:['Erect CXR (Rigler sign) or CT; Boey score, lactate, ABG; NPO, NG, PPI, antibiotics.','Most need patch repair within hours. Selected sealed perforations: Taylor non-operative care with close review. Biopsy gastric ulcers; test for H. pylori.']},
+    resus: ['NPO, NG tube on free drainage, two large-bore IV lines.',
+            'Aggressive crystalloid resuscitation; urinary catheter with hourly output target of 0.5 mL/kg/h or more.',
+            'IV opioid analgesia; IV PPI (e.g. pantoprazole 40–80 mg).',
+            'Broad-spectrum IV antibiotics (add antifungal cover in high-risk patients) given early.',
+            'Group and crossmatch, correct coagulopathy, ECG, arterial line and ICU bed if in shock. Early consent and theatre booking.'],
+    diagnostics: ['CBC (leukocytosis, anaemia if bleeding), U&E, creatinine, glucose.',
+                  'Lactate and ABG: metabolic acidosis reflects sepsis.',
+                  'Amylase or lipase (mildly raised in perforation; excludes pancreatitis as the differential).',
+                  'LFTs, INR, group and crossmatch.',
+                  'ECG and troponin (exclude MI as a differential). H. pylori testing when stable.'],
+    imaging: ['Erect CXR (or left lateral decubitus if unable to stand for 10 minutes): free air, Rigler sign.',
+              'Bedside US: free fluid, echogenic peritoneal stripe with air artefacts (shift with position), thickened bowel wall.',
+              'CT abdomen with IV contrast (oral contrast optional) if the diagnosis is uncertain: free air, fluid, defect adjacent to the stomach or duodenum.',
+              'Water-soluble contrast study only when considering non-operative management.'],
+    triggers: ['Generalised peritonitis, shock or sepsis: urgent laparotomy or laparoscopy within hours of presentation.',
+               'Standard operation: omental (Graham) patch closure plus peritoneal lavage; biopsy gastric ulcers to exclude malignancy.',
+               'Large perforation (over 2 cm), malignancy suspected, or failed patch: consider resection (e.g. partial gastrectomy).',
+               'Non-operative (Taylor) management only if sealed leak on contrast, stable, localised signs and close senior review. Convert to surgery on any deterioration.',
+               'Red flags: delay over 24 hours, age over 70, shock, renal failure, steroid or NSAID use, ASA 3 or above.']
+  },
+  {
+    id: 'renal-colic', name: 'Acute Renal Colic / Urolithiasis', category: 'Urological & Trauma',
+    presentation: 'Sudden severe colicky loin-to-groin pain, restlessness, nausea and vomiting, haematuria',
+    keywords: ['kidney stone', 'ureteric stone', 'hydronephrosis', 'CT KUB', 'JJ stent', 'nephrostomy', 'PCN', 'urosepsis', 'stone size', 'loin pain'],
+    highlight: {
+      title: 'Stone size decides the pathway',
+      rows: [['Under 5 mm', 'About 90% pass: analgesia, alpha-blocker (medical expulsive therapy), urology follow-up'],
+             ['5–10 mm', 'About 50% pass: trial of 4–6 weeks if pain controlled, otherwise URS or ESWL'],
+             ['Over 10 mm', 'Unlikely to pass: intervention (URS, ESWL, PCNL)'],
+             ['Infected obstructed stone', 'Emergency: decompress with JJ stent or PCN, treat stone later']],
+      note: 'Fever plus obstruction is a urological emergency. Never delay drainage for stone treatment.'
+    },
+    labs: [['Serum creatinine','0.6–1.2 mg/dL','Raised with solitary kidney, bilateral obstruction or prior CKD'],
+           ['WBC','4,000–11,000 /µL','Above 15,000 with fever suggests infected obstruction'],
+           ['CRP','Below 5 mg/L','Raised in infection'],
+           ['Urinalysis','No blood, nitrite negative','Haematuria (85–90%); nitrite or leukocytes suggest infection'],
+           ['Urine culture','Sterile','Positive in infected obstruction; send before antibiotics'],
+           ['Calcium / uric acid','8.5–10.5 mg/dL / 3.5–7.2 mg/dL','Hypercalcaemia or hyperuricaemia points to metabolic stone cause'],
+           ['Lactate','0.5–2.0 mmol/L','Above 2 signals urosepsis']],
+    algo: {triage:'Fever, hypotension, solitary kidney or AKI with obstruction?',
+      unstable:['Sepsis bundle: 2 large-bore IVs, blood and urine cultures, broad-spectrum IV antibiotics within 1 h, fluids; bedside US for hydronephrosis.','Urgent decompression: JJ stent or percutaneous nephrostomy. Delay stone treatment until sepsis resolves; ICU if on pressors.'],
+      stable:['NSAID analgesia, non-contrast CT KUB, U&E, urine dip and culture.','Under 5 mm: observe with alpha-blocker. Over 10 mm or not passing: URS, ESWL or PCNL. Admit if pain is refractory.']},
+    resus: ['IV or IM NSAID first line (diclofenac or ketorolac); opioid for breakthrough; antiemetic.',
+            'IV access and maintenance fluids; avoid forced diuresis. Strict input and output.',
+            'If febrile or septic: 2 large-bore IVs, cultures, broad-spectrum IV antibiotics (e.g. ceftriaxone or piperacillin-tazobactam).',
+            'NPO if vomiting or theatre likely.'],
+    diagnostics: ['Pregnancy test in women of childbearing age. Strain urine and send stone for analysis.'],
+    imaging: ['Non-contrast low-dose CT KUB is the gold standard: stone size (mm), position, density (HU), ureteric dilatation, perinephric stranding.',
+              'Bedside US: hydronephrosis (mild, moderate, severe), absent ureteric jets. First line in pregnancy and children.',
+              'KUB X-ray for follow-up of radio-opaque stones only (uric acid stones are radiolucent).'],
+    triggers: ['Infected obstructed system (fever, pyuria, sepsis): urgent JJ stent or PCN. No ureteroscopy while infected.',
+               'Solitary kidney, bilateral obstruction or rising creatinine.',
+               'Intractable pain or vomiting despite adequate analgesia.',
+               'Stone over 10 mm, or over 5 mm not passing by 4–6 weeks.',
+               'Red flag: first colic over age 60. Exclude ruptured AAA before labelling as renal colic.']
+  },
+  {
+    id: 'aur-bph', name: 'Acute Urinary Retention (BPH)', category: 'Urological & Trauma',
+    presentation: 'Painful inability to void, suprapubic distension in an older man with LUTS; triggers include anticholinergics, constipation, infection, surgery',
+    keywords: ['AUR', 'retention', 'prostate', 'BPH', 'Foley', 'suprapubic catheter', 'tamsulosin', 'TWOC', 'post-obstructive diuresis', 'bladder scan'],
+    highlight: {
+      title: 'Catheter route and post-drainage monitoring',
+      rows: [['First line', 'Urethral Foley (14–16 Fr, lubricated); coude tip if difficult'],
+             ['Suprapubic puncture if', 'Failed or traumatic urethral attempt, stricture, suspected urethral injury'],
+             ['Suprapubic contraindications', 'Impalpable bladder, previous lower abdominal or pelvic surgery, suspected bladder cancer, coagulopathy or anticoagulation'],
+             ['Post-obstructive diuresis', 'Urine above 200 mL/h for 2 hours or above 3 L/day after draining over 1 L']],
+      note: 'Start an alpha-blocker (tamsulosin 0.4 mg) at catheterisation. Trial without catheter after 2–3 days.'
+    },
+    labs: [['Serum creatinine / eGFR','0.6–1.2 mg/dL','Raised in post-renal AKI'],
+           ['Sodium / potassium','Na 135–145; K 3.5–5.0 mmol/L','Hyperkalaemia with AKI; monitor for Na and K loss during diuresis'],
+           ['Urinalysis and culture','No nitrite or leukocytes','Positive nitrite or leukocytes: infection is the precipitant'],
+           ['WBC','4,000–11,000 /µL','Raised in UTI or prostatitis'],
+           ['PSA','Below 4 ng/mL','Falsely high with retention or catheter; defer for about 6 weeks'],
+           ['Bladder scan volume','Residual below 50 mL','Above 300–400 mL confirms retention; over 1 L is high-volume']],
+    algo: {triage:'Sepsis, AKI or haemodynamic instability with retention?',
+      unstable:['2 large-bore IVs, cultures, IV antibiotics, fluids, U&E and potassium; immediate catheter drainage.','Monitor hourly urine output for post-obstructive diuresis and replace with IV saline. Suprapubic catheter if urethral route fails.'],
+      stable:['Bedside bladder scan, analgesia, gentle urethral Foley; record drained volume; send urine, U&E.','Start tamsulosin, treat cause (constipation, drugs, UTI), TWOC in 2–3 days. Failed TWOC or recurrent retention: urology for TURP.']},
+    resus: ['Analgesia and immediate bladder drainage; record the initial drained volume.',
+            'Hourly urine output after drainage; IV saline if diuresis exceeds 200 mL/h or patient is hypotensive.',
+            'If febrile: cultures and IV antibiotics. NPO only if septic or surgery is planned.',
+            'Stop anticholinergics and opioids where possible; treat constipation.'],
+    diagnostics: ['Digital rectal exam for prostate size, constipation and rectal mass. Review drug list.'],
+    imaging: ['Bedside bladder scan: volume and residual.',
+              'Renal and bladder US: hydronephrosis, thickened bladder wall, prostate size, stones.',
+              'KUB or CT if stone is suspected as the cause.'],
+    triggers: ['Failed catheterisation after two attempts: suprapubic catheter (if bladder palpable) by senior or urology.',
+               'Post-obstructive diuresis with hypotension or electrolyte derangement: admit, IV fluids, electrolytes every 6–12 h.',
+               'Infected retention or urosepsis: drain, cultures, IV antibiotics.',
+               'Clot retention: 3-way catheter and irrigation.',
+               'Red flag: retention with back pain, saddle numbness or neurology (cauda equina, cord compression): urgent MRI.']
+  },
+  {
+    id: 'urinary-trauma', name: 'Urinary System Trauma (Renal & Bladder Injury)', category: 'Urological & Trauma',
+    presentation: 'Blunt or penetrating flank or pelvic trauma with haematuria, flank or suprapubic pain; high-speed deceleration or pelvic fracture',
+    keywords: ['renal trauma', 'kidney injury', 'bladder rupture', 'haematuria', 'hematuria', 'pelvic fracture', 'CT cystography', 'retroperitoneal hematoma', 'AAST', 'laceration', 'urethral injury'],
+    highlight: {
+      title: 'Injury triage and management',
+      rows: [['Haematuria with pelvic fracture', 'Suspect bladder rupture; check urethra first (blood at meatus, high-riding prostate)'],
+             ['Renal AAST Grade I–IV, stable', 'Conservative: bed rest, serial Hb, repeat imaging; angioembolisation if active bleeding'],
+             ['Unstable, expanding retroperitoneal haematoma', 'Immediate exploratory laparotomy'],
+             ['Intraperitoneal bladder rupture', 'Laparotomy and surgical repair'],
+             ['Extraperitoneal bladder rupture', 'Catheter drainage for 10–14 days; cystogram to confirm healing']],
+      note: 'Severity of haematuria does not match injury grade, and pedicle avulsion can occur without haematuria. Image if gross haematuria, or microscopic haematuria with shock, or penetrating or deceleration injury.'
+    },
+    labs: [['Haemoglobin','M 13.5–17.5, F 12–15.5 g/dL','Serial falling values indicate ongoing bleeding'],
+           ['Urinalysis','No RBCs','Gross or microscopic haematuria (above 5 RBC/HPF)'],
+           ['Serum creatinine','0.6–1.2 mg/dL','Raised in renal injury; rise from absorbed urine in bladder rupture'],
+           ['Lactate / base deficit','Lactate 0.5–2.0 mmol/L','Above 4 signals haemorrhagic shock'],
+           ['INR','0.8–1.2','Above 1.5 signals trauma coagulopathy'],
+           ['Group and crossmatch','-','Crossmatch early; activate massive transfusion protocol if unstable']],
+    algo: {triage:'Primary survey: haemodynamically unstable or expanding retroperitoneal haematoma?',
+      unstable:['ATLS: 2 large-bore IVs, blood products or massive transfusion, tranexamic acid, eFAST, pelvic binder. Do not delay for CT.','Immediate exploratory laparotomy: control retroperitoneal haematoma, nephrectomy if needed, repair intraperitoneal bladder rupture, damage control.'],
+      stable:['IV-contrast CT with delayed excretory phase; CT cystography for haematuria with pelvic fracture; retrograde urethrogram first if urethral injury signs.','Renal Grade I–IV or extraperitoneal bladder rupture: conservative care (serial Hb, catheter drainage 10–14 days). Angioembolise active bleed; repair intraperitoneal rupture.']},
+    resus: ['ATLS airway, breathing, circulation; 2 large-bore IVs; crystalloid then blood products.',
+            'eFAST; pelvic binder for pelvic fracture; tranexamic acid within 3 hours; analgesia.',
+            'No blind Foley if urethral injury suspected (blood at meatus, perineal haematoma, high-riding prostate): urethrogram first or suprapubic catheter.',
+            'Foley only once the urethra is cleared; monitor hourly urine output.'],
+    diagnostics: ['Look for associated pelvic, spinal and abdominal injuries.'],
+    imaging: ['eFAST: free fluid, perirenal haematoma.',
+              'CT abdomen and pelvis with IV contrast and delayed 5–10 minute excretory phase: laceration, contrast blush, extravasation, haematoma, AAST grade.',
+              'CT cystography (retrograde fill with at least 350 mL dilute contrast, then drained films): extraperitoneal shows perivesical extravasation; intraperitoneal outlines bowel loops and paracolic gutters. Standard CT alone can miss rupture.',
+              'Retrograde urethrogram when urethral injury is suspected.'],
+    triggers: ['Haemodynamic instability, expanding or pulsatile retroperitoneal haematoma, or Grade V (shattered kidney, avulsed pedicle): emergent laparotomy.',
+               'Intraperitoneal bladder rupture or bladder neck injury: surgical repair.',
+               'Ongoing bleeding in a stable patient: angioembolisation.',
+               'Penetrating renal injury with instability or peritonitis: laparotomy.',
+               'Red flags: pelvic fracture with haematuria, high-speed deceleration (pedicle or UPJ avulsion), blood at meatus.']
+  }
+];
+
+/* ===================== Rendering and filtering ===================== */
+const SECTIONS = [
+  { key: 'resus', letter: 'a', label: 'Immediate Bedside Resuscitation', color: 'var(--c-resus)', open: true },
+  { key: 'diagnostics', letter: 'b', label: 'Essential Diagnostics & Labs', color: 'var(--c-diag)' },
+  { key: 'imaging', letter: 'c', label: 'First-line Imaging & Bedside Ultrasound', color: 'var(--c-img)' },
+  { key: 'triggers', letter: 'd', label: 'Surgical Triggers & Red Flags', color: 'var(--c-trig)' }
+];
+const $ = (s) => document.querySelector(s);
+let query = '', category = 'All';
+
+const labsHTML = (L) => `<div><div class="lab head"><span>Test</span><span>Normal range</span><span>Expected finding in this disease</span></div>${L.map(l => `<div class="lab"><span class="n">${l[0]}</span><span class="r">${l[1]}</span><span class="f" style="--c:var(--c-diag)">${l[2]}</span></div>`).join('')}</div>`;
+const flowHTML = (a) => {
+  const br = (cls, label, col, st) => `<div class="br" style="--c:${col}"><div class="brh">${label}</div><div class="fbox"><b>Step 2: Stabilisation and work-up</b>${st[0]}</div><div class="farrow">▼</div><div class="fbox"><b>Step 3: Definitive medical or surgical action</b>${st[1]}</div></div>`;
+  return `<details class="sec" style="--c:var(--blue)" open><summary><span class="badge" aria-hidden="true">e</span><span>Clinical Decision Algorithm (AMBOSS-Style Flowchart)</span><svg class="chev" width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 4l7 6-7 6z"/></svg></summary>
+    <div class="body flow"><div class="fbox" style="--c:var(--blue)"><b>Step 1: Triage</b>${a.triage}</div><div class="farrow">▼</div>
+    <div class="fbranches">${br('u','Hemodynamically UNSTABLE','var(--c-resus)',a.unstable)}${br('s','Hemodynamically STABLE','var(--c-diag)',a.stable)}</div></div></details>`;
+};
+function cardHTML(c) {
+  const hl = c.highlight ? `
+    <div class="hl p-3 mt-3">
+      <h3 class="font-semibold text-sm">${c.highlight.title}</h3>
+      <dl class="mt-2 grid gap-y-1 text-sm">
+        ${c.highlight.rows.map(r => `<div class="flex gap-3 justify-between border-b border-dashed pb-1" style="border-color:var(--line)"><dt class="muted">${r[0]}</dt><dd class="font-semibold text-right">${r[1]}</dd></div>`).join('')}
+      </dl>
+      ${c.highlight.note ? `<p class="text-sm mt-2">${c.highlight.note}</p>` : ''}
+    </div>` : '';
+  const secs = SECTIONS.map(s => `
+    <details class="sec" style="--c:${s.color}" ${s.open ? 'open' : ''}>
+      <summary><span class="badge" aria-hidden="true">${s.letter}</span><span>${s.label}</span>
+        <svg class="chev" width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 4l7 6-7 6z"/></svg></summary>
+      ${s.key === 'diagnostics' && c.labs ? labsHTML(c.labs) : ''}<ul>${(c[s.key] || []).map(i => `<li>${i}</li>`).join('')}</ul>
+    </details>`).join('');
+  return `
+    <article class="card p-4 sm:p-5" id="${c.id}" data-cat="${c.category}">
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="min-w-0">
+          <h2 class="text-xl font-bold">${c.name}</h2>
+          <p class="text-sm muted mt-0.5">${c.presentation}</p>
+        </div>
+        <span class="pill">${c.category}</span>
+      </div>
+      ${hl}
+      <div class="flex justify-end gap-2 mt-3 mb-2">
+        <button class="btn" data-act="expand">Expand all</button>
+        <button class="btn" data-act="collapse">Collapse all</button>
+      </div>
+      <div class="grid gap-2">${secs}${c.algo ? flowHTML(c.algo) : ''}</div>
+    </article>`;
+}
+
+function build() {
+  $('#list').innerHTML = DATA.map(cardHTML).join('');
+  const cats = ['All', ...CATEGORIES];
+  $('#chips').innerHTML = cats.map(c => `<button class="chip rounded-full px-4 py-1.5 text-sm" data-cat="${c}" aria-pressed="${c === category}">${c}</button>`).join('');
+  DATA.forEach(c => { c._hay = [c.name, c.presentation, c.category, ...(c.keywords || []), ...(c.labs || []).map(l => l[0])].join(' ').toLowerCase(); });
+}
+
+function apply() {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  DATA.forEach(c => {
+    const ok = (category === 'All' || c.category === category) && terms.every(t => c._hay.includes(t));
+    document.getElementById(c.id).hidden = !ok;
+    if (ok) shown++;
+  });
+  $('#empty').classList.toggle('hidden', shown > 0);
+  $('#count').textContent = `${shown} of ${DATA.length} conditions`;
+  document.querySelectorAll('#chips .chip').forEach(b => b.setAttribute('aria-pressed', b.dataset.cat === category));
+}
+
+$('#q').addEventListener('input', e => { query = e.target.value; apply(); });
+$('#chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  category = b.dataset.cat; apply();
+});
+$('#list').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const open = b.dataset.act === 'expand';
+  b.closest('article').querySelectorAll('details').forEach(d => d.open = open);
+});
+
+build(); apply();
+</script>
+</body>
+</html>
